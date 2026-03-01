@@ -252,6 +252,10 @@ The ResNet18 model was fine-tuned on a combined dataset from INRAE scientific im
 
 ## Getting Started
 
+> 📘 **For complete step-by-step instructions**, see [docs/setup_guide.md](docs/setup_guide.md)
+
+This section provides a quick overview. The setup guide contains detailed instructions, troubleshooting, and production deployment steps.
+
 ### Prerequisites
 
 - Python 3.11+

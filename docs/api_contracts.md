@@ -170,7 +170,13 @@ to generate structured recommendations.
 | `severity` | string | ✅ | Observed severity: `"low"`, `"moderate"`, or `"high"` |
 | `area_m2` | float | ✅ | Vineyard surface area in square meters |
 | `date_iso` | string | ✅ | Diagnosis date in ISO format `YYYY-MM-DD` (used to infer season) |
-| `location` | string | ❌ | Vineyard location (optional, for context) |
+| `location` | string | ❌ | Vineyard location (optional, for display and LLM context only — does not affect RAG retrieval) |
+
+> **Note on `location`:** This field is passed to the LLM prompt as additional context
+> and echoed back in the response for display purposes. It does **not** influence
+> which knowledge base chunks are retrieved from Weaviate. Treatment recommendations
+> are the same regardless of location. Future versions may use location for
+> region-specific regulations or climate-adjusted advice.
 
 **Example request body:**
 ```json
@@ -276,10 +282,22 @@ import requests
 with open("leaf_photo.jpg", "rb") as f:
     diag_response = requests.post(
         "https://mouniat-vitiscanpro-diagno-api.hf.space/diagno",
-        files={"file": f}
+        files={"file": f},
+        timeout=30
     )
 
-diag_data     = diag_response.json()
+# Handle potential errors
+if diag_response.status_code != 200:
+    print(f"Diagnostic API error: {diag_response.status_code}")
+    exit(1)
+
+diag_data = diag_response.json()
+
+# Check that predictions exist and are non-empty
+if not diag_data.get("predictions"):
+    print("No predictions returned by the model")
+    exit(1)
+
 top_disease   = diag_data["predictions"][0]["disease"]     # e.g. "plasmopara_viticola"
 confidence    = diag_data["predictions"][0]["confidence"]  # e.g. 0.923
 model_version = diag_data["model_version"]
@@ -294,15 +312,21 @@ treatment_response = requests.post(
         "area_m2":   100,
         "date_iso":  "2026-02-24",
         "location":  "Bordeaux"
-    }
+    },
+    timeout=60
 )
 
-treatment_data = treatment_response.json()["data"]
+# Handle potential errors
+if treatment_response.status_code != 200:
+    print(f"Treatment API error: {treatment_response.status_code}")
+    exit(1)
+
+treatment_data = treatment_response.json().get("data", {})
 
 # Step 3 — Display results in the UI
-print(f"Diagnosed disease : {treatment_data['disease_name']} ({confidence:.0%} confidence)")
-print(f"Diagnostic        : {treatment_data['diagnostic']}")
-print(f"Treatment actions : {treatment_data['treatment_actions']}")
+print(f"Diagnosed disease : {treatment_data.get('disease_name', 'Unknown')} ({confidence:.0%} confidence)")
+print(f"Diagnostic        : {treatment_data.get('diagnostic', 'N/A')}")
+print(f"Treatment actions : {treatment_data.get('treatment_actions', [])}")
 ```
 
 ---
@@ -339,7 +363,15 @@ def call_diagnostic_api(image_file):
             timeout=30  # Important: set timeout
         )
         response.raise_for_status()  # Raises HTTPError for 4xx/5xx
-        return response.json()
+        
+        data = response.json()
+        
+        # Validate response structure
+        if not data.get("predictions"):
+            return {"error": "No predictions in response"}
+        
+        return data
+        
     except requests.exceptions.Timeout:
         return {"error": "API timeout - please try again"}
     except requests.exceptions.HTTPError as e:

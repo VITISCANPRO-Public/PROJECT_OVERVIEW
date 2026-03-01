@@ -214,6 +214,11 @@ VITISCAN_API_DIAGNO_URL=https://mouniat-vitiscanpro-diagno-api.hf.space
 
 # HuggingFace (for deployment)
 HF_TOKEN=hf_your_token_here
+
+# Drift Detection (Evidently)
+VITISCAN_DRIFT_DETECTION_ENABLED=true
+VITISCAN_DRIFT_THRESHOLD=0.3
+VITISCAN_MIN_IMAGES_FOR_DRIFT=50
 ```
 
 **Generate a Fernet key:**
@@ -289,7 +294,7 @@ otherwise it will show connection errors.
 ```bash
 cd vitiscan/Airflow
 
-# Build the custom Docker image (includes mlflow, boto3, etc.)
+# Build the custom Docker image (includes mlflow, boto3, evidently, etc.)
 docker compose build
 
 # Start all services
@@ -318,6 +323,58 @@ aws s3 cp vitiscan/Model_CNN/data-inrae/plasmopara_viticola/any_image.jpg \
 
 # Then trigger dag_data_ingestion from the Airflow UI
 ```
+
+---
+
+## Step 8b — Initialize drift detection (one-time setup)
+
+Before the drift detection feature can work, you must generate reference features from the training dataset. This only needs to be done once.
+
+```bash
+# Enter the Airflow scheduler container
+docker compose exec airflow-scheduler bash
+
+# Verify Evidently is installed
+python -c "import evidently; print(f'Evidently version: {evidently.__version__}')"
+# Expected: Evidently version: 0.4.33
+
+# Generate reference features from training dataset
+cd /opt/airflow/scripts
+python generate_reference_features.py
+```
+
+Expected output:
+```
+======================================================================
+VITISCAN — Reference Features Generator
+======================================================================
+Bucket      : vitiscanpro-bucket
+Prefix      : datasets/combined/
+Output key  : monitoring/reference_features.csv
+======================================================================
+
+📂 Listing training images...
+   Found 2450 images
+
+🔍 Extracting features...
+   Processing image 1/2450...
+   ...
+
+☁️ Uploading to s3://vitiscanpro-bucket/monitoring/reference_features.csv...
+✅ Successfully uploaded reference features!
+```
+
+Verify the file was created:
+```bash
+aws s3 ls s3://vitiscanpro-bucket/monitoring/
+# Expected: reference_features.csv
+
+# Exit the container
+exit
+```
+
+> **Note:** If you skip this step, drift detection will be automatically disabled
+> and `dag_monitoring` will log a warning: "No reference features found".
 
 ---
 
@@ -402,6 +459,19 @@ docker compose build
 docker compose up -d
 ```
 
+### `ModuleNotFoundError: No module named 'evidently'` in Airflow
+
+Same issue — rebuild the Docker image:
+```bash
+docker compose down
+docker compose build --no-cache
+docker compose up -d
+```
+
+### `No reference features found` in dag_monitoring logs
+
+The drift detection reference dataset has not been initialized. Run Step 8b above.
+
 ### `WEAVIATE_URL is missing in deployed environment`
 
 You have a `WEAVIATE_URL` secret set to `localhost` in HuggingFace.
@@ -448,6 +518,18 @@ If you see `Cannot use relative path: sqlite:///airflow.db`, the CI workflow
 needs absolute paths. Use `${{ github.workspace }}/airflow.db` instead of
 `airflow.db` in the `AIRFLOW__DATABASE__SQL_ALCHEMY_CONN` variable.
 
+### Dependency conflicts when installing Airflow
+
+If you see errors like `apache-airflow-providers-common-io==1.3.0` conflicts,
+your `requirements.txt` has pinned sub-dependencies. Clean it to only include
+direct dependencies:
+```txt
+apache-airflow==3.1.3
+boto3>=1.34.0
+mlflow>=2.22.0
+evidently>=0.4.33
+```
+
 ---
 
 ## Quick Reference Commands
@@ -460,5 +542,6 @@ needs absolute paths. Use `${{ github.workspace }}/airflow.db` instead of
 | Start Airflow | `cd Airflow && docker compose up -d` |
 | Stop Airflow | `cd Airflow && docker compose down` |
 | View Airflow logs | `cd Airflow && docker compose logs -f airflow-scheduler` |
+| Init drift detection | `docker compose exec airflow-scheduler python /opt/airflow/scripts/generate_reference_features.py` |
 | Run linter | `ruff check dags/` |
 | Run tests | `pytest tests/ -v` |
