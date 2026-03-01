@@ -12,7 +12,6 @@ Before starting, make sure you have the following installed and configured:
 | Tool | Version | Check |
 |---|---|---|
 | Python | 3.11+ | `python3 --version` |
-| Conda | any | `conda --version` |
 | Docker Desktop | 4.x+ | `docker --version` |
 | Docker Compose | 2.x+ | `docker compose version` |
 | Git | any | `git --version` |
@@ -65,7 +64,7 @@ Enter when prompted:
 ```
 AWS Access Key ID     : your_access_key
 AWS Secret Access Key : your_secret_key
-Default region name  : eu-west-3
+Default region name   : eu-west-3
 Default output format : json
 ```
 
@@ -78,35 +77,75 @@ You should see the bucket contents without any error.
 
 ---
 
-## Step 3 — Create a Conda environment
+## Step 3 — Create virtual environments
 
-One shared environment works for all Python components:
+Each component uses its own virtual environment to avoid dependency conflicts.
+
+### Option A: Using venv (Recommended)
 
 ```bash
-conda create -n vitiscan python=3.11 -y
-conda activate vitiscan
-```
-
-Install dependencies for each component:
-```bash
-# Model CNN
-pip install -r vitiscan/Model_CNN/requirements.txt
-
 # Diagnostic API
-pip install -r vitiscan/Diagnostic_API/requirements.txt
+cd vitiscan/Diagnostic_API
+python3.11 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+deactivate
 
 # Treatment Plan API
-pip install -r vitiscan/Treatment_Plan_API_RAG_LLM/requirements.txt
+cd ../Treatment_Plan_API_RAG_LLM
+python3.11 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+deactivate
 
-# Streamlit
+# Streamlit WebUI
+cd ../WebUI_Streamlit
+python3.11 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+deactivate
+
+# Model CNN (for local training/testing)
+cd ../Model_CNN
+python3.11 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+deactivate
+```
+
+### Option B: Using Conda
+
+```bash
+# Diagnostic API
+conda create -n vitiscan-diagno python=3.11 -y
+conda activate vitiscan-diagno
+pip install -r vitiscan/Diagnostic_API/requirements.txt
+conda deactivate
+
+# Treatment Plan API
+conda create -n vitiscan-treatment python=3.11 -y
+conda activate vitiscan-treatment
+pip install -r vitiscan/Treatment_Plan_API_RAG_LLM/requirements.txt
+conda deactivate
+
+# Streamlit WebUI
+conda create -n vitiscan-webui python=3.11 -y
+conda activate vitiscan-webui
 pip install -r vitiscan/WebUI_Streamlit/requirements.txt
+conda deactivate
+
+# Model CNN
+conda create -n vitiscan-model python=3.11 -y
+conda activate vitiscan-model
+pip install -r vitiscan/Model_CNN/requirements.txt
+conda deactivate
 ```
 
 ---
 
 ## Step 4 — Configure environment variables
 
-Each component needs a `.env` file. Copy the example file and fill in your values.
+Each component needs a `.env` file. Copy the template file and fill in your values.
 
 ### Diagnostic API
 
@@ -118,20 +157,18 @@ cp .env.template .env
 Edit `.env`:
 ```bash
 # --- MLFlow ---
-MLFLOW_TRACKING_URI="https://******.hf.space"
-MLFLOW_MODEL_URI="s3://your_bucket/mlflow-artifacts/models/******/artifacts"
-S3_BUCKET_NAME="your_bucket"
-MLFLOW_ARTIFACT_ROOT="s3://your-bucket/mlflow-artifacts/"
+MLFLOW_TRACKING_URI="https://mouniat-vitiscanpro-hf.hf.space"
+MLFLOW_MODEL_URI="models:/VitiscanResNet18/Production"
+S3_BUCKET_NAME="vitiscanpro-bucket"
+MLFLOW_ARTIFACT_ROOT="s3://vitiscanpro-bucket/mlflow-artifacts/"
 
 # --- Dataset ---
-
 DATASET_NAME="inrae"
 
-# --- AWS and S3 bucket CREDENTIALS ---
+# --- AWS Credentials ---
 AWS_ACCESS_KEY_ID="your_key"
-AWS_SECRET_ACCESS_KEY="your_access_key"
-AWS_DEFAULT_REGION="your_region"
-AWS_REGION="your_region"
+AWS_SECRET_ACCESS_KEY="your_secret_key"
+AWS_DEFAULT_REGION="eu-west-3"
 ```
 
 ### Treatment Plan API
@@ -143,10 +180,13 @@ cp .env.template .env
 
 Edit `.env`:
 ```bash
-WEAVIATE_URL=          # leave empty for local dev, fill with cloud URL for production
-WEAVIATE_API_KEY=      # leave empty for local dev
-HF_API_TOKEN="hf**********************"
-HF_MODEL_ID=meta-llama/Meta-Llama-3-8B-Instruct
+# Leave empty for local fallback mode, fill for production
+WEAVIATE_URL=
+WEAVIATE_API_KEY=
+
+# HuggingFace for LLM inference
+HF_API_TOKEN="hf_your_token_here"
+HF_MODEL_ID="mistralai/Mistral-7B-Instruct-v0.3"
 ```
 
 ### Airflow
@@ -158,13 +198,27 @@ cp .env.template .env
 
 Edit `.env`:
 ```bash
+# Airflow
 AIRFLOW_UID=50000
+AIRFLOW__CORE__FERNET_KEY=your_generated_fernet_key
+
+# AWS
 AWS_ACCESS_KEY_ID=your_access_key
 AWS_SECRET_ACCESS_KEY=your_secret_key
-AWS_DEFAULT_REGION=your_region
+AWS_DEFAULT_REGION=eu-west-3
+
+# Vitiscan
+VITISCAN_S3_BUCKET=vitiscanpro-bucket
 MLFLOW_TRACKING_URI=https://mouniat-vitiscanpro-hf.hf.space
+VITISCAN_API_DIAGNO_URL=https://mouniat-vitiscanpro-diagno-api.hf.space
+
+# HuggingFace (for deployment)
 HF_TOKEN=hf_your_token_here
-NGROK_AUTHTOKEN=your_ngrok_token   # optional, for external access
+```
+
+**Generate a Fernet key:**
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
 ---
@@ -172,8 +226,8 @@ NGROK_AUTHTOKEN=your_ngrok_token   # optional, for external access
 ## Step 5 — Run the Diagnostic API locally
 
 ```bash
-conda activate vitiscan_api_diagno
 cd vitiscan/Diagnostic_API
+source venv/bin/activate  # or: conda activate vitiscan-diagno
 uvicorn app:app --reload --port 4000
 ```
 
@@ -203,7 +257,7 @@ docker compose up weaviate -d
 Wait 20 seconds for Weaviate to initialize, then start the API:
 
 ```bash
-conda activate vitiscan-rag
+source venv/bin/activate  # or: conda activate vitiscan-treatment
 uvicorn app.main:app --reload --port 4001
 ```
 
@@ -218,8 +272,8 @@ Open `http://localhost:4001/docs`.
 ## Step 7 — Run Streamlit locally
 
 ```bash
-conda activate vitiscan_streamlit
 cd vitiscan/WebUI_Streamlit
+source venv/bin/activate  # or: conda activate vitiscan-webui
 streamlit run app.py
 ```
 
@@ -250,7 +304,7 @@ Wait until you see:
 scheduler | INFO - Starting the scheduler...
 ```
 
-Open `http://localhost:8080` and log in with:
+Open `http://localhost:8081` and log in with:
 - Username: `airflow`
 - Password: `airflow`
 
@@ -294,7 +348,7 @@ After deployment, configure these secrets in HuggingFace Space settings
 | Secret name | Value |
 |---|---|
 | `MLFLOW_TRACKING_URI` | `https://mouniat-vitiscanpro-hf.hf.space` |
-| `MLFLOW_MODEL_URI` | `models:/resnet18-vitiscan/Production` |
+| `MLFLOW_MODEL_URI` | `models:/VitiscanResNet18/Production` |
 | `AWS_ACCESS_KEY_ID` | your AWS key |
 | `AWS_SECRET_ACCESS_KEY` | your AWS secret |
 | `S3_BUCKET_NAME` | `vitiscanpro-bucket` |
@@ -308,6 +362,7 @@ then configure:
 |---|---|
 | `WEAVIATE_URL` | your Weaviate Cloud cluster URL |
 | `WEAVIATE_API_KEY` | your Weaviate Cloud API key |
+| `HF_API_TOKEN` | your HuggingFace token |
 
 ### Streamlit app
 
@@ -338,7 +393,7 @@ From that point on, every push to `main` will automatically:
 
 ## Common issues and fixes
 
-**`ModuleNotFoundError: No module named 'mlflow'` in Airflow**
+### `ModuleNotFoundError: No module named 'mlflow'` in Airflow
 
 The Docker image was not rebuilt after adding mlflow to `requirements.txt`. Run:
 ```bash
@@ -347,33 +402,63 @@ docker compose build
 docker compose up -d
 ```
 
-**`WEAVIATE_URL is missing in deployed environment`**
+### `WEAVIATE_URL is missing in deployed environment`
 
 You have a `WEAVIATE_URL` secret set to `localhost` in HuggingFace.
 Delete it from Settings → Repository secrets — the API will use the fallback mode instead.
 
-**`Connection refused` when calling the Diagnostic API locally**
+### `Connection refused` when calling the Diagnostic API locally
 
 The API is not running. Start it with:
 ```bash
-conda activate vitiscan
 cd Diagnostic_API
+source venv/bin/activate
 uvicorn app:app --reload --port 4000
 ```
 
-**HuggingFace Space shows `This Space is sleeping`**
+### HuggingFace Space shows `This Space is sleeping`
 
 Free Spaces sleep after inactivity. Click "Wake up this Space" and wait 1-2 minutes.
 
-**`aws: command not found`**
+### `aws: command not found`
 
 Install the AWS CLI:
 ```bash
-brew install awscli    # Mac
+# Mac
+brew install awscli
+
+# Linux
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+
+# Windows
+# Download from https://aws.amazon.com/cli/
 ```
 Then run `aws configure` with your credentials.
 
-**GitHub Actions deploy job skipped**
+### GitHub Actions deploy job skipped
 
 The deploy job only runs on push to `main`, not on Pull Requests.
 Make sure you are pushing directly to `main` and that both test jobs passed.
+
+### SQLite error in Airflow CI
+
+If you see `Cannot use relative path: sqlite:///airflow.db`, the CI workflow
+needs absolute paths. Use `${{ github.workspace }}/airflow.db` instead of
+`airflow.db` in the `AIRFLOW__DATABASE__SQL_ALCHEMY_CONN` variable.
+
+---
+
+## Quick Reference Commands
+
+| Task | Command |
+|------|---------|
+| Start Diagnostic API | `cd Diagnostic_API && source venv/bin/activate && uvicorn app:app --port 4000` |
+| Start Treatment API | `cd Treatment_Plan_API_RAG_LLM && source venv/bin/activate && uvicorn app.main:app --port 4001` |
+| Start Streamlit | `cd WebUI_Streamlit && source venv/bin/activate && streamlit run app.py` |
+| Start Airflow | `cd Airflow && docker compose up -d` |
+| Stop Airflow | `cd Airflow && docker compose down` |
+| View Airflow logs | `cd Airflow && docker compose logs -f airflow-scheduler` |
+| Run linter | `ruff check dags/` |
+| Run tests | `pytest tests/ -v` |

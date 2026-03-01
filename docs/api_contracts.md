@@ -32,6 +32,7 @@ as input to the Treatment Plan API.
 
 **Base URL (production):** `https://mouniat-vitiscanpro-diagno-api.hf.space`
 **Base URL (local):** `http://localhost:4000`
+**Repository:** [VITISCAN-PRO/Diagnostic_API](https://github.com/VITISCAN-PRO/Diagnostic_API)
 
 ---
 
@@ -97,12 +98,12 @@ curl -X POST https://mouniat-vitiscanpro-diagno-api.hf.space/diagno \
 {
   "predictions": [
     {"disease": "plasmopara_viticola",         "confidence": 0.923},
-    {"disease": "erysiphe_necator",             "confidence": 0.041},
-    {"disease": "guignardia_bidwellii",         "confidence": 0.018},
-    {"disease": "healthy",                      "confidence": 0.008},
-    {"disease": "elsinoe_ampelina",             "confidence": 0.005},
-    {"disease": "colomerus_vitis",              "confidence": 0.003},
-    {"disease": "phaeomoniella_chlamydospora",  "confidence": 0.002}
+    {"disease": "erysiphe_necator",            "confidence": 0.041},
+    {"disease": "guignardia_bidwellii",        "confidence": 0.018},
+    {"disease": "healthy",                     "confidence": 0.008},
+    {"disease": "elsinoe_ampelina",            "confidence": 0.005},
+    {"disease": "colomerus_vitis",             "confidence": 0.003},
+    {"disease": "phaeomoniella_chlamydospora", "confidence": 0.002}
   ],
   "model_version": "resnet18-vitiscan-v3"
 }
@@ -134,6 +135,7 @@ curl -X POST https://mouniat-vitiscanpro-diagno-api.hf.space/diagno \
 
 **Base URL (production):** `https://mouniat-vitiscanpro-solution-api.hf.space`
 **Base URL (local):** `http://localhost:4001`
+**Repository:** [VITISCAN-PRO/Treatment_Plan_API_RAG_LLM](https://github.com/VITISCAN-PRO/Treatment_Plan_API_RAG_LLM)
 
 ---
 
@@ -265,7 +267,7 @@ curl -X POST https://mouniat-vitiscanpro-solution-api.hf.space/solutions \
 
 ## 3. How Streamlit uses both APIs
 
-This is the exact sequence implemented in the Streamlit `WebUI` repository:
+This is the exact sequence implemented in the Streamlit `WebUI_Streamlit` repository:
 
 ```python
 import requests
@@ -277,9 +279,9 @@ with open("leaf_photo.jpg", "rb") as f:
         files={"file": f}
     )
 
-diag_data    = diag_response.json()
-top_disease  = diag_data["predictions"][0]["disease"]     # e.g. "plasmopara_viticola"
-confidence   = diag_data["predictions"][0]["confidence"]  # e.g. 0.923
+diag_data     = diag_response.json()
+top_disease   = diag_data["predictions"][0]["disease"]     # e.g. "plasmopara_viticola"
+confidence    = diag_data["predictions"][0]["confidence"]  # e.g. 0.923
 model_version = diag_data["model_version"]
 
 # Step 2 — Get treatment plan for the diagnosed disease
@@ -301,4 +303,59 @@ treatment_data = treatment_response.json()["data"]
 print(f"Diagnosed disease : {treatment_data['disease_name']} ({confidence:.0%} confidence)")
 print(f"Diagnostic        : {treatment_data['diagnostic']}")
 print(f"Treatment actions : {treatment_data['treatment_actions']}")
+```
+
+---
+
+## 4. Disease Classes Reference
+
+The 7 INRAE disease classes used throughout the system:
+
+| `cnn_label` | Display Name | Type |
+|---|---|---|
+| `colomerus_vitis` | Grape erineum mite | Parasite |
+| `elsinoe_ampelina` | Anthracnose | Fungal |
+| `erysiphe_necator` | Powdery mildew | Fungal |
+| `guignardia_bidwellii` | Black rot | Fungal |
+| `healthy` | Healthy | — |
+| `phaeomoniella_chlamydospora` | Esca disease | Wood pathogen |
+| `plasmopara_viticola` | Downy mildew | Fungal |
+
+---
+
+## 5. Error Handling Best Practices
+
+### In Streamlit
+
+```python
+import requests
+
+def call_diagnostic_api(image_file):
+    """Call the Diagnostic API with proper error handling."""
+    try:
+        response = requests.post(
+            "https://mouniat-vitiscanpro-diagno-api.hf.space/diagno",
+            files={"file": image_file},
+            timeout=30  # Important: set timeout
+        )
+        response.raise_for_status()  # Raises HTTPError for 4xx/5xx
+        return response.json()
+    except requests.exceptions.Timeout:
+        return {"error": "API timeout - please try again"}
+    except requests.exceptions.HTTPError as e:
+        return {"error": f"API error: {e.response.status_code}"}
+    except requests.exceptions.RequestException as e:
+        return {"error": f"Connection error: {str(e)}"}
+```
+
+### Handling Fallback Mode
+
+The Treatment API may return fallback responses when Weaviate is unavailable:
+
+```python
+treatment_data = response.json()["data"]
+
+# Check if in fallback mode
+if any("fallback" in w.lower() for w in treatment_data.get("warnings", [])):
+    st.warning("Treatment recommendations are simplified (fallback mode)")
 ```

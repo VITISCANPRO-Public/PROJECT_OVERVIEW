@@ -4,9 +4,9 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue)](https://python.org)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.2-orange)](https://pytorch.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110-green)](https://fastapi.tiangolo.com)
-[![Airflow](https://img.shields.io/badge/Airflow-3.1-red)](https://airflow.apache.org)
-[![MLflow](https://img.shields.io/badge/MLflow-2.13-purple)](https://mlflow.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)](https://fastapi.tiangolo.com)
+[![Airflow](https://img.shields.io/badge/Airflow-3.1.3-red)](https://airflow.apache.org)
+[![MLflow](https://img.shields.io/badge/MLflow-2.22-purple)](https://mlflow.org)
 
 ---
 
@@ -39,7 +39,7 @@ Beyond the end-user application, Vitiscan demonstrates a complete MLOps lifecycl
 - Zero-downtime deployment with pre-production validation
 - Full CI/CD pipeline for code quality and automated deployment
 
-This project was built as a certification project in MLOps engineering and serves as a professional portfolio demonstration.
+This project was built as a certification project in data science and MLOps engineering and serves as a professional portfolio demonstration.
 
 ---
 
@@ -47,7 +47,7 @@ This project was built as a certification project in MLOps engineering and serve
 
 | Component | URL | 
 |---|---|
-| Web Application (Streamlit) | [vitiscanpro-webui.hf.space](https://mouniat-vitiscanpro-webui.hf.space) | 
+| Web Application (Streamlit) | [vitiscan-streamlit.hf.space](https://mouniat-vitiscan-streamlit.hf.space) | 
 | Diagnostic API | [vitiscanpro-diagno-api.hf.space/docs](https://mouniat-vitiscanpro-diagno-api.hf.space/docs) | 
 | Treatment Plan API | [vitiscanpro-solution-api.hf.space/docs](https://mouniat-vitiscanpro-solution-api.hf.space/docs) | 
 | MLflow Tracking | [vitiscanpro-hf.hf.space](https://mouniat-vitiscanpro-hf.hf.space) | 
@@ -128,7 +128,7 @@ Every week, the **Airflow** `dag_monitoring` DAG checks two things: are there en
 
 ### The code quality guardrail (CI/CD)
 
-Every time a developer pushes code to GitHub, **GitHub Actions** automatically runs unit tests on the model scripts and integration tests on the Diagnostic API. Only if all tests pass does it automatically redeploy the API to HuggingFace Spaces. This guarantees that broken code never reaches production.
+Every time a developer pushes code to GitHub, **GitHub Actions** automatically runs unit tests on the model scripts and integration tests on the Diagnostic API. Only if all tests pass, it automatically redeploy the API to HuggingFace Spaces. This guarantees that broken code never reaches production.
 
 ### The key architectural separation
 
@@ -146,12 +146,12 @@ This project is organized across **6 specialized repositories**, each with a sin
 
 | Repository | Role | Key Technologies |
 |---|---|---|
-| [Model_CNN](https://github.com/VITISCAN-PRO/Model_CNN.git) | ResNet18 model training, evaluation scripts, unit tests | PyTorch, MLflow, scikit-learn |
-| [Diagnostic_API](https://github.com/VITISCAN-PRO/Diagnostic_API.git) | REST API for disease classification from leaf images | FastAPI, PyTorch, MLflow |
-| [Treatment_Plan_API_RAG_LLM](https://github.com/VITISCAN-PRO/Treatment_Plan_API_RAG_LLM.git) | RAG pipeline for treatment plan generation | FastAPI, Weaviate, LLM |
-| [WebUI_Streamlit](https://github.com/VITISCAN-PRO/WebUI_Streamlit.git) | User-facing web application | Streamlit, Python |
-| [MLflow](https://github.com/VITISCAN-PRO/MLflow.git) | Experiment tracking server configuration | MLflow, HuggingFace Spaces |
-| [Airflow](https://github.com/VITISCAN-PRO/Airflow.git) | Automated MLOps pipeline (3 DAGs) | Apache Airflow, AWS S3, boto3 |
+| [Model_CNN](https://github.com/VITISCAN-PRO/Model_CNN) | ResNet18 model training, evaluation scripts, unit tests | PyTorch, MLflow, scikit-learn |
+| [Diagnostic_API](https://github.com/VITISCAN-PRO/Diagnostic_API) | REST API for disease classification from leaf images | FastAPI, PyTorch, MLflow |
+| [Treatment_Plan_API_RAG_LLM](https://github.com/VITISCAN-PRO/Treatment_Plan_API_RAG_LLM) | RAG pipeline for treatment plan generation | FastAPI, Weaviate, LLM |
+| [WebUI_Streamlit](https://github.com/VITISCAN-PRO/WebUI_Streamlit) | User-facing web application | Streamlit, Python |
+| [MLflow](https://github.com/VITISCAN-PRO/MLflow) | Experiment tracking server configuration | MLflow, HuggingFace Spaces |
+| [Airflow](https://github.com/VITISCAN-PRO/Airflow) | Automated MLOps pipeline (3 DAGs) | Apache Airflow, AWS S3, boto3 |
 
 
 ### Detailed role of each repository
@@ -200,12 +200,12 @@ The ResNet18 model was fine-tuned on a combined dataset from INRAE scientific im
 | PyTorch | 2.2 | Model training and inference |
 | torchvision | 0.17 | ResNet18 architecture and image transforms |
 | scikit-learn | 1.4 | Metrics computation (F1, recall, accuracy) |
-| MLflow | 2.13 | Experiment tracking and model registry |
+| MLflow | 2.22 | Experiment tracking and model registry |
 
 ### APIs & Backend
 | Tool | Version | Purpose |
 |---|---|---|
-| FastAPI | 0.110 | REST API framework |
+| FastAPI | 0.115 | REST API framework |
 | Uvicorn | 0.29 | ASGI server |
 | Weaviate | 4.x | Vector database for RAG |
 | sentence-transformers | 2.7 | Text embedding for RAG retrieval |
@@ -214,7 +214,7 @@ The ResNet18 model was fine-tuned on a combined dataset from INRAE scientific im
 ### MLOps & Infrastructure
 | Tool | Version | Purpose |
 |---|---|---|
-| Apache Airflow | 3.1 | ML pipeline orchestration |
+| Apache Airflow | 3.1.3 | ML pipeline orchestration |
 | GitHub Actions | — | CI/CD for code quality and deployment |
 | AWS S3 | — | Dataset and artifact storage |
 | AWS EC2 | p3.2xlarge | GPU instance for model training |
@@ -245,12 +245,12 @@ The ResNet18 model was fine-tuned on a combined dataset from INRAE scientific im
 mkdir vitiscan && cd vitiscan
 
 # Clone each repository
-git clone https://github.com/mouniat/Model_CNN.git
-git clone https://github.com/mouniat/Diagnostic_API.git
-git clone https://github.com/mouniat/Treatment_Plan_API_RAG_LLM.git
-git clone https://github.com/mouniat/WebUI_Streamlit.git
-git clone https://github.com/mouniat/MLflow.git
-git clone https://github.com/mouniat/Airflow.git
+git clone https://github.com/VITISCAN-PRO/Model_CNN.git
+git clone https://github.com/VITISCAN-PRO/Diagnostic_API.git
+git clone https://github.com/VITISCAN-PRO/Treatment_Plan_API_RAG_LLM.git
+git clone https://github.com/VITISCAN-PRO/WebUI_Streamlit.git
+git clone https://github.com/VITISCAN-PRO/MLflow.git
+git clone https://github.com/VITISCAN-PRO/Airflow.git
 ```
 
 ### Run each component
@@ -258,7 +258,7 @@ git clone https://github.com/mouniat/Airflow.git
 **1. Diagnostic API (local)**
 ```bash
 cd Diagnostic_API
-conda activate vitiscan_api_diagno
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 uvicorn app:app --reload --port 4000
 # → http://localhost:4000/docs
@@ -267,6 +267,7 @@ uvicorn app:app --reload --port 4000
 **2. Treatment Plan API (local)**
 ```bash
 cd Treatment_Plan_API_RAG_LLM
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 # Start Weaviate first (requires Docker)
 docker compose up weaviate -d
@@ -277,6 +278,7 @@ uvicorn app.main:app --reload --port 4001
 **3. Streamlit app (local)**
 ```bash
 cd WebUI_Streamlit
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 streamlit run app.py
 # → http://localhost:8501
@@ -285,14 +287,16 @@ streamlit run app.py
 **4. Airflow pipeline (local via Docker)**
 ```bash
 cd Airflow
+cp .env.template .env
+# Edit .env with your AWS credentials and tokens
 docker compose build
 docker compose up -d
-# → http://localhost:8080  (login: airflow / airflow)
+# → http://localhost:8081  (login: airflow / airflow)
 ```
 
 ### Required environment variables
 
-Each component requires a `.env` file. Refer to the `.env.example` file in each repository for the full list. Key variables across the project:
+Each component requires a `.env` file. Refer to the `.env.template` file in each repository for the full list. Key variables across the project:
 
 | Variable | Used by | Description |
 |---|---|---|
@@ -303,7 +307,7 @@ Each component requires a `.env` file. Refer to the `.env.example` file in each 
 | `S3_BUCKET_NAME` | Airflow, Diagnostic API | S3 bucket name |
 | `WEAVIATE_URL` | Treatment Plan API | Weaviate Cloud cluster URL |
 | `WEAVIATE_API_KEY` | Treatment Plan API | Weaviate Cloud API key |
-| `HF_TOKEN` | GitHub Actions | HuggingFace deployment token |
+| `HF_TOKEN` | GitHub Actions, Airflow | HuggingFace deployment token |
 
 ---
 
@@ -336,7 +340,7 @@ dag_monitoring
               deploy to prod          rollback
 ```
 
-For the full pipeline documentation, see the [Airflow repository README](https://github.com/mouniat/Airflow).
+For the full pipeline documentation, see the [Airflow repository README](https://github.com/VITISCAN-PRO/Airflow).
 
 ---
 
@@ -386,6 +390,6 @@ The model detects **7 grape vine disease classes** from the INRAE scientific nom
 This project was developed as a certification project in MLOps engineering and data science.
 
 - HuggingFace: [huggingface.co/MouniaT](https://huggingface.co/MouniaT)
-- LinkedIn: [www.linkedin.com/in/mounia-tonazzini](www.linkedin.com/in/mounia-tonazzini)
-- GitHub: [github/Mounia-Agronomist-Datascientist](https://github.com/Mounia-Agronomist-Datascientist)
-- Email : mounia.tonazzini@gmail.com
+- LinkedIn: [linkedin.com/in/mounia-tonazzini](https://www.linkedin.com/in/mounia-tonazzini)
+- GitHub: [github.com/VITISCAN-PRO](https://github.com/VITISCAN-PRO)
+- Email: mounia.tonazzini@gmail.com
