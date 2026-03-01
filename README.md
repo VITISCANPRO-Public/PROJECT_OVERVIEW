@@ -7,6 +7,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)](https://fastapi.tiangolo.com)
 [![Airflow](https://img.shields.io/badge/Airflow-3.1.3-red)](https://airflow.apache.org)
 [![MLflow](https://img.shields.io/badge/MLflow-2.22-purple)](https://mlflow.org)
+[![Evidently](https://img.shields.io/badge/Evidently-0.4.33-teal)](https://evidentlyai.com)
 
 ---
 
@@ -21,6 +22,7 @@
 - [Technology Stack](#technology-stack)
 - [Getting Started](#getting-started)
 - [MLOps Pipeline](#mlops-pipeline)
+- [Data Drift Detection](#data-drift-detection)
 - [CI/CD Pipeline](#cicd-pipeline)
 - [Disease Classes](#disease-classes)
 - [Author](#author)
@@ -35,6 +37,7 @@ A grower takes a photo of a suspicious leaf → Vitiscan identifies the disease 
 
 Beyond the end-user application, Vitiscan demonstrates a complete MLOps lifecycle:
 - Automated model retraining when new labeled data is available
+- **Data drift detection** using Evidently to monitor image quality changes
 - Continuous model performance monitoring
 - Zero-downtime deployment with pre-production validation
 - Full CI/CD pipeline for code quality and automated deployment
@@ -92,6 +95,9 @@ This project was built as a certification project in data science and MLOps engi
 │       ├── Delay trigger (≥60 days since training) ─┤                  │
 │       └── Performance check (F1 or Recall < 0.90) ─┼─ alert           │
 │                                                    │                  │
+│       Data Drift Detection (Evidently)             │                  │
+│       └── Compare new images vs training set ──────┼─ drift alert    │
+│           (brightness, contrast, colors, etc.)     │                  │
 │                                                    ▼                  │
 │   dag_data_ingestion                                                  │
 │       │  validate → integrate → balance → update metadata             │
@@ -102,6 +108,7 @@ This project was built as a certification project in data science and MLOps engi
 │                                                                       │
 │                    AWS S3 (vitiscanpro-bucket)                        │
 │          new-images/ → datasets/combined/ → mlflow-artifacts/         │
+│                              └── monitoring/evidently/reports/        │
 └───────────────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -124,7 +131,15 @@ A grower opens the **Streamlit app** and uploads a photo of a suspicious leaf. S
 
 ### The automated model lifecycle (back end)
 
-Every week, the **Airflow** `dag_monitoring` DAG checks two things: are there enough new labeled images on S3 to justify retraining? Has the production model's F1 score dropped below threshold? If a retraining trigger is met, it automatically chains `dag_data_ingestion` (which validates and balances the new images) and then `dag_retraining` (which trains, compares, and deploys a new model to **MLflow** and **HuggingFace Spaces** — but only if it genuinely outperforms the current one).
+Every week, the **Airflow** `dag_monitoring` DAG performs a comprehensive health check:
+
+1. **Volume & time triggers**: Are there enough new labeled images on S3 (≥200)? Has it been 60+ days since last training?
+
+2. **Data drift detection**: Using **Evidently**, the pipeline extracts numerical features from new images (brightness, contrast, color distributions, aspect ratio) and compares them statistically against the training dataset reference. If more than 30% of features show significant drift, an alert is triggered — this could indicate camera changes, lighting conditions, or seasonal variations affecting image quality.
+
+3. **Performance monitoring**: Has the production model's F1 score or recall dropped below 0.90 threshold?
+
+If a retraining trigger is met, it automatically chains `dag_data_ingestion` (which validates and balances the new images) and then `dag_retraining` (which trains, compares, and deploys a new model to **MLflow** and **HuggingFace Spaces** — but only if it genuinely outperforms the current one).
 
 ### The code quality guardrail (CI/CD)
 
@@ -135,8 +150,9 @@ Every time a developer pushes code to GitHub, **GitHub Actions** automatically r
 ```
 GitHub Actions  →  protects CODE quality    (triggered by git push)
 Airflow         →  manages MODEL lifecycle  (triggered by time + data)
+Evidently       →  monitors DATA quality    (triggered by Airflow weekly)
 ```
-These two systems operate independently and only share HuggingFace Spaces as a deployment target — GitHub Actions deploys the API code, Airflow deploys the model weights.
+These systems operate independently and only share HuggingFace Spaces and S3 as deployment/storage targets.
 
 ---
 
@@ -151,7 +167,7 @@ This project is organized across **6 specialized repositories**, each with a sin
 | [Treatment_Plan_API_RAG_LLM](https://github.com/VITISCAN-PRO/Treatment_Plan_API_RAG_LLM) | RAG pipeline for treatment plan generation | FastAPI, Weaviate, LLM |
 | [WebUI_Streamlit](https://github.com/VITISCAN-PRO/WebUI_Streamlit) | User-facing web application | Streamlit, Python |
 | [MLflow](https://github.com/VITISCAN-PRO/MLflow) | Experiment tracking server configuration | MLflow, HuggingFace Spaces |
-| [Airflow](https://github.com/VITISCAN-PRO/Airflow) | Automated MLOps pipeline (3 DAGs) | Apache Airflow, AWS S3, boto3 |
+| [Airflow](https://github.com/VITISCAN-PRO/Airflow) | Automated MLOps pipeline (3 DAGs) + drift detection | Apache Airflow, Evidently, AWS S3 |
 
 
 ### Detailed role of each repository
@@ -166,7 +182,12 @@ This project is organized across **6 specialized repositories**, each with a sin
 
 **MLflow** contains the configuration for the MLflow tracking server hosted on HuggingFace Spaces. It stores all experiment runs, hyperparameters, metrics, and model artifacts. It is the single source of truth for which model version is currently in production.
 
-**Airflow** contains the 3 DAGs that automate the entire ML lifecycle. `dag_monitoring` runs weekly and decides if retraining is needed. `dag_data_ingestion` validates, integrates, and balances new labeled images. `dag_retraining` trains, evaluates, and safely deploys improved models — with pre-production testing and automatic rollback.
+**Airflow** contains the 3 DAGs that automate the entire ML lifecycle, plus the **Evidently-based drift detection module**:
+- `dag_monitoring` — runs weekly and decides if retraining is needed, includes data drift analysis
+- `dag_data_ingestion` — validates, integrates, and balances new labeled images
+- `dag_retraining` — trains, evaluates, and safely deploys improved models
+- `utils/drift_detection.py` — Evidently integration for statistical drift analysis
+- `scripts/generate_reference_features.py` — one-time script to create baseline feature dataset
 
 ---
 
@@ -215,6 +236,7 @@ The ResNet18 model was fine-tuned on a combined dataset from INRAE scientific im
 | Tool | Version | Purpose |
 |---|---|---|
 | Apache Airflow | 3.1.3 | ML pipeline orchestration |
+| **Evidently** | **0.4.33** | **Data drift detection and monitoring** |
 | GitHub Actions | — | CI/CD for code quality and deployment |
 | AWS S3 | — | Dataset and artifact storage |
 | AWS EC2 | p3.2xlarge | GPU instance for model training |
@@ -294,6 +316,18 @@ docker compose up -d
 # → http://localhost:8081  (login: airflow / airflow)
 ```
 
+**5. Initialize drift detection reference (one-time setup)**
+```bash
+# Enter the Airflow scheduler container
+docker compose exec airflow-scheduler bash
+
+# Generate reference features from training dataset
+cd /opt/airflow/scripts
+python generate_reference_features.py
+
+# This creates s3://vitiscanpro-bucket/monitoring/reference_features.csv
+```
+
 ### Required environment variables
 
 Each component requires a `.env` file. Refer to the `.env.template` file in each repository for the full list. Key variables across the project:
@@ -308,6 +342,9 @@ Each component requires a `.env` file. Refer to the `.env.template` file in each
 | `WEAVIATE_URL` | Treatment Plan API | Weaviate Cloud cluster URL |
 | `WEAVIATE_API_KEY` | Treatment Plan API | Weaviate Cloud API key |
 | `HF_TOKEN` | GitHub Actions, Airflow | HuggingFace deployment token |
+| `VITISCAN_DRIFT_DETECTION_ENABLED` | Airflow | Enable/disable drift detection (default: true) |
+| `VITISCAN_DRIFT_THRESHOLD` | Airflow | Drift alert threshold (default: 0.3 = 30%) |
+| `VITISCAN_MIN_IMAGES_FOR_DRIFT` | Airflow | Minimum images for drift analysis (default: 50) |
 
 ---
 
@@ -323,24 +360,97 @@ dag_monitoring
         │
         ├── ≥200 new images on S3?  ──┐
         ├── ≥60 days since training? ─┤ → dag_data_ingestion
-        └── F1 or Recall < 0.90?    ──┘        │
-                                               ▼
-                                      dag_retraining
-                                             │
-                              ┌──────────────┴──────────────┐
-                              │                             │
-                      New model better?              Not better?
-                              │                             │
-                    deploy to pre-prod            keep current model
-                              │
-                       tests pass?
-                    ┌─────────┴──────────┐
-                   YES                   NO
-                    │                    │
-              deploy to prod          rollback
+        └── Otherwise                        │
+               │                             ▼
+               ▼                       dag_retraining
+       check_data_drift                      │
+          (Evidently)                        │
+               │                             │
+        ┌──────┴──────┐              ┌───────┴───────┐
+        ▼             ▼              ▼               ▼
+   drift_alert   check_performance   New model    Not better?
+                       │             better?           │
+                ┌──────┴──────┐         │        keep current
+                ▼             ▼         ▼
+          perf_alert     no_action   deploy preprod
+                                         │
+                                    tests pass?
+                                    ┌────┴────┐
+                                   YES       NO
+                                    │         │
+                               deploy prod  rollback
 ```
 
 For the full pipeline documentation, see the [Airflow repository README](https://github.com/VITISCAN-PRO/Airflow).
+
+---
+
+## Data Drift Detection
+
+Vitiscan uses **Evidently** to detect when incoming images differ statistically from the training dataset. This is crucial for maintaining model reliability in production.
+
+### Why drift detection matters
+
+In agricultural applications, image characteristics can change due to:
+- **Equipment changes**: New smartphone or camera with different color calibration
+- **Seasonal variations**: Different lighting conditions across seasons
+- **Geographic expansion**: Images from new regions with different soil/climate
+- **User behavior**: Different photo angles or distances
+
+If these changes are significant, the model may perform poorly on the new data distribution — even if test metrics looked good at training time.
+
+### How it works
+
+1. **Reference dataset**: A one-time script extracts numerical features from all training images and saves them to S3 as `reference_features.csv`
+
+2. **Feature extraction**: For each image, Evidently computes:
+   - `brightness` — average pixel intensity
+   - `contrast` — standard deviation of pixel values
+   - `aspect_ratio` — width/height ratio
+   - `red_mean`, `green_mean`, `blue_mean` — average color channel values
+   - `saturation` — color intensity
+   - `file_size_kb` — compressed file size (proxy for image complexity)
+
+3. **Statistical comparison**: Evidently applies statistical tests (Kolmogorov-Smirnov, chi-squared) to compare the distribution of each feature between the reference and current datasets
+
+4. **Drift decision**: If more than 30% of features show statistically significant drift (configurable via `VITISCAN_DRIFT_THRESHOLD`), an alert is triggered
+
+### Generated reports
+
+Each drift analysis produces:
+- **HTML report** — Interactive visualization archived on S3 (`monitoring/evidently/reports/`)
+- **JSON results** — Machine-readable output for pipeline decisions
+
+Example JSON output:
+```json
+{
+  "dataset_drift": true,
+  "drift_share": 0.43,
+  "drifted_features": ["brightness", "contrast", "blue_mean"],
+  "feature_drift_scores": {
+    "brightness": {"drift_detected": true, "drift_score": 0.002},
+    "contrast": {"drift_detected": true, "drift_score": 0.015},
+    "aspect_ratio": {"drift_detected": false, "drift_score": 0.234}
+  }
+}
+```
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITISCAN_DRIFT_DETECTION_ENABLED` | `true` | Enable/disable drift detection |
+| `VITISCAN_DRIFT_THRESHOLD` | `0.3` | Alert threshold (30% of features drifted) |
+| `VITISCAN_MIN_IMAGES_FOR_DRIFT` | `50` | Minimum images required for analysis |
+
+### Recommended actions when drift is detected
+
+1. **Investigate the cause**: Check recent image uploads for quality issues or equipment changes
+2. **Evaluate impact**: Review model predictions on recent images for accuracy
+3. **Decide on action**:
+   - If temporary (e.g., one-time batch issue): ignore and monitor
+   - If permanent (e.g., new camera standard): update reference dataset
+   - If quality problem: fix at source before retraining
 
 ---
 
